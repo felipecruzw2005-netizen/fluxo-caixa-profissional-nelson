@@ -215,16 +215,39 @@ def bootstrap():
         for stmt in [s.strip() for s in ddl.split(';') if s.strip()]:
             conn.exec_driver_sql(stmt)
 
-def query(sql: str, params: Iterable[Any]=()) -> List[Dict[str, Any]]:
+from sqlalchemy import create_engine, text
+import os
+
+DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{os.environ.get('FC_DB_PATH','fluxo.db')}"
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+_IS_PG = DATABASE_URL.startswith("postgresql")
+
+def _normalize_sql(sql: str, params):
+    """Converte placeholders SQLite (?) para nomeados (:p0,:p1,...) quando usando Postgres."""
+    if not _IS_PG or "?" not in sql:
+        return sql, params
+    out, new_params, idx = [], {}, 0
+    for ch in sql:
+        if ch == "?":
+            key = f"p{idx}"
+            out.append(f":{key}")
+            new_params[key] = params[idx] if isinstance(params, (list, tuple)) else None
+            idx += 1
+        else:
+            out.append(ch)
+    return "".join(out), new_params
+
+def query(sql: str, params=()):
+    sql2, params2 = _normalize_sql(sql, params)
     with engine.begin() as conn:
-        res = conn.execute(text(sql), params if isinstance(params, dict) else params)
+        res = conn.execute(text(sql2), params2 if isinstance(params2, dict) else params2)
         cols = res.keys()
         return [dict(zip(cols, row)) for row in res.fetchall()]
 
-def execute(sql: str, params: Iterable[Any]=()) -> int:
+def execute(sql: str, params=()):
+    sql2, params2 = _normalize_sql(sql, params)
     with engine.begin() as conn:
-        res = conn.execute(text(sql), params if isinstance(params, dict) else params)
-        # emulate lastrowid (best-effort)
+        res = conn.execute(text(sql2), params2 if isinstance(params2, dict) else params2)
         try:
             return res.lastrowid or 0
         except Exception:

@@ -1,0 +1,15 @@
+streamlit==1.37.1
+pandas>=2.0
+openpyxl>=3.1
+reportlab>=4.1
+pillow>=10.2
+plotly>=5.22
+sqlalchemy>=2.0
+sqlite-utils>=3.36
+passlib[bcrypt]>=1.7
+pydantic>=2.7
+numpy
+
+psycopg[binary]>=3.1
+SQLAlchemy>=2.0
+supabase>=2.6

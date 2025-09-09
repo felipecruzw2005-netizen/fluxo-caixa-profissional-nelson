@@ -1,29 +1,36 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-from lib import db, ui
+from lib import db
 
 st.set_page_config(page_title="Exportar Planilha", page_icon="📤", layout="wide")
 
-ui.header("assets/logo.png", "Exportar Planilha", "Excel fiel ao que está no sistema")
+st.title("📤 Exportar Planilha")
+st.caption("Gera um Excel com exatamente o que está no banco.")
 
 rows = db.query("""
-SELECT m.*, c.nome as cliente
+SELECT m.id, m.data, m.descricao, m.categoria, m.forma_pagamento, m.tipo, m.valor, m.status, m.vencimento,
+       m.centro_custo, m.placa, m.observacao, c.nome AS cliente
 FROM movimentos m
-LEFT JOIN clientes c ON c.id=m.cliente_id
+LEFT JOIN clientes c ON c.id = m.cliente_id
 WHERE m.deleted_at IS NULL
 ORDER BY COALESCE(NULLIF(m.data,''), m.created_at) DESC
 """, ())
 
-if not rows:
-    st.info("Sem dados para exportar.")
-    st.stop()
-
 df = pd.DataFrame(rows)
-st.dataframe(df.head(50), use_container_width=True, hide_index=True)
+if df.empty:
+    st.info("Sem dados para exportar.")
+else:
+    st.dataframe(df.head(50), use_container_width=True, hide_index=True)
 
-out = BytesIO()
-with pd.ExcelWriter(out, engine="openpyxl") as w:
-    df.to_excel(w, index=False, sheet_name="Planilha")
+    out = BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as w:
+        df.to_excel(w, index=False, sheet_name="Planilha")
 
-st.download_button("⬇️ Exportar Excel", data=out.getvalue(), file_name="planilha_fluxo.xlsx", use_container_width=True, type="primary")
+    st.download_button(
+        "⬇️ Exportar Excel",
+        data=out.getvalue(),
+        file_name="planilha_fluxo.xlsx",
+        use_container_width=True,
+        type="primary",
+    )

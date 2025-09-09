@@ -1,27 +1,38 @@
-
-import streamlit as st
-import pandas as pd
+import streamlit as st, pandas as pd
 from lib import db, ui, storage
-import os, base64
 
-def page():
-    ui.header("assets/logo.png", "Comprovantes", "Galeria e downloads")
-    rows = db.query("SELECT id, data, descricao, tipo, valor, arquivo_path FROM movimentos WHERE arquivo_path IS NOT NULL ORDER BY date(data) DESC")
-    if not rows:
-        st.info("Nenhum comprovante anexado.")
-        return
-    for r in rows:
-        with st.container(border=True):
-            c1,c2,c3,c4 = st.columns([0.2,0.4,0.2,0.2])
-            c1.write(str(r["data"]))
-            c2.write(f"{r['descricao']} — R$ {r['valor']:.2f}")
-            url = storage.public_url(r['arquivo_path'])
-            if str(r["arquivo_path"]).lower().endswith((".png",".jpg",".jpeg")):
-                if url:
-                    c3.image(url, width=160)
-                else:
-                    c3.image(r['arquivo_path'], width=160)
-            else:
-                c3.write("PDF")
-            bytes_data = storage.read_bytes(r["arquivo_path"])
-            st.download_button("Baixar", data=bytes_data, file_name=os.path.basename(r["arquivo_path"]), key=f"dwn{r['id']}")
+st.set_page_config(page_title="Comprovantes", page_icon="🧾", layout="wide")
+ui.header("assets/logo.png", "Comprovantes", "Upload, galeria e download")
+
+# Upload
+with st.expander("Enviar novo comprovante"):
+    up = st.file_uploader("Arquivo (png, jpg, jpeg, pdf)", type=["png","jpg","jpeg","pdf"])
+    mov_id = st.number_input("ID do movimento (opcional)", min_value=0, step=1)
+    if st.button("Enviar", type="primary") and up:
+        path = storage.save_upload(up)
+        if mov_id:
+            db.execute("UPDATE movimentos SET arquivo_path=? WHERE id=?", (path, int(mov_id)))
+        st.success("Arquivo enviado.")
+        st.experimental_rerun()
+
+# Listagem
+rows = db.query("""SELECT id, descricao, arquivo_path FROM movimentos 
+                   WHERE arquivo_path IS NOT NULL AND deleted_at IS NULL 
+                   ORDER BY id DESC LIMIT 300""", ())
+df = pd.DataFrame(rows)
+if df.empty:
+    st.info("Nenhum comprovante.")
+else:
+    for _, r in df.iterrows():
+        c1,c2,c3 = st.columns([5,3,2])
+        c1.write(f"**#{int(r['id'])}** — {r['descricao']}")
+        url = storage.public_url(r["arquivo_path"])
+        if str(r["arquivo_path"]).lower().endswith((".png",".jpg",".jpeg")):
+            if url: c2.image(url, width=160)
+            else:   c2.image(r["arquivo_path"], width=160)
+        else:
+            c2.write("PDF")
+        if url:
+            c3.download_button("Baixar", data=storage.read_bytes(r["arquivo_path"]), file_name=f"comprovante_{int(r['id'])}.{'pdf' if r['arquivo_path'].lower().endswith('pdf') else 'bin'}", use_container_width=True)
+        else:
+            c3.download_button("Baixar", data=storage.read_bytes(r["arquivo_path"]), file_name=f"comprovante_{int(r['id'])}.bin", use_container_width=True)

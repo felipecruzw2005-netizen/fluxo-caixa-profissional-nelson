@@ -1,30 +1,24 @@
-
-import streamlit as st
-import pandas as pd
+import streamlit as st, pandas as pd
 from lib import db, ui
 
-def load_df():
-    rows = db.query("SELECT m.*, c.nome as cliente FROM movimentos m LEFT JOIN clientes c ON c.id=m.cliente_id ORDER BY date(m.data) ASC")
-    return pd.DataFrame(rows)
+st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide")
+ui.header("assets/logo.png", "Dashboard", "Resumo financeiro")
 
-def page():
-    ui.header("assets/logo.png", "Fluxo de Caixa", "Visão geral e indicadores")
-    df = load_df()
-    if df.empty:
-        st.info("Nenhum movimento cadastrado ainda.")
-        return
-    entradas = float(df[df["tipo"]=="entrada"]["valor"].sum())
-    saidas = float(df[df["tipo"]=="saida"]["valor"].sum())
-    saldo = entradas - saidas
-    ui.metric_cards({
-        "Entradas": (f"R$ {entradas:,.2f}", "+", "#10B981"),
-        "Saídas": (f"R$ {saidas:,.2f}", "-", "#EF4444"),
-        "Saldo": (f"R$ {saldo:,.2f}", "", "#7C3AED")
-    })
-    df["data"] = pd.to_datetime(df["data"])
-    monthly = df.groupby(df["data"].dt.to_period("M")).agg(receitas=("valor", lambda s: s[df.loc[s.index, "tipo"]=="entrada"].sum()),
-                                                           despesas=("valor", lambda s: s[df.loc[s.index, "tipo"]=="saida"].sum())).reset_index()
-    monthly["data"] = monthly["data"].astype(str)
-    ui.line_chart(monthly, x="data", y=["receitas","despesas"], title="Evolução mensal")
-    st.subheader("Últimos lançamentos")
-    st.dataframe(df.sort_values("data", ascending=False).head(20)[["data","descricao","categoria","tipo","valor","status"]], use_container_width=True, hide_index=True)
+rows = db.query("""SELECT tipo, status, COALESCE(valor,0) AS valor FROM movimentos WHERE deleted_at IS NULL""", ())
+df = pd.DataFrame(rows)
+
+total_ent = float(df[df["tipo"]=="entrada"]["valor"].sum()) if not df.empty else 0.0
+total_sai = float(df[df["tipo"]=="saida"]["valor"].sum()) if not df.empty else 0.0
+saldo = total_ent - total_sai
+
+c1,c2,c3 = st.columns(3)
+c1.metric("Entradas", f"R$ {total_ent:,.2f}")
+c2.metric("Saídas",   f"R$ {total_sai:,.2f}")
+c3.metric("Saldo",    f"R$ {saldo:,.2f}")
+
+st.divider()
+st.subheader("Status")
+if df.empty:
+    st.info("Sem dados.")
+else:
+    st.dataframe(df.groupby(["tipo","status"])["valor"].sum().reset_index(), use_container_width=True, hide_index=True)

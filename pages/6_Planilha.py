@@ -4,8 +4,19 @@ from lib import db, ui
 st.set_page_config(page_title="Planilha", page_icon="📑", layout="wide")
 ui.header("assets/logo.png", "Planilha (edição)", "Edite como Excel e salve no banco")
 
-rows = db.query("""SELECT id,data,descricao,categoria,forma_pagamento,tipo,valor,status,vencimento,centro_custo,placa,observacao
-                   FROM movimentos WHERE deleted_at IS NULL ORDER BY COALESCE(NULLIF(data,''), created_at) DESC LIMIT 500""", ())
+rows = db.query(
+    """
+    SELECT id, data, descricao, categoria, forma_pagamento, tipo, valor, status, vencimento,
+           centro_custo, placa, observacao,
+           to_char(created_at, 'YYYY-MM-DD') AS created_at_iso
+    FROM movimentos
+    WHERE deleted_at IS NULL
+    ORDER BY COALESCE(NULLIF(data,''), to_char(created_at, 'YYYY-MM-DD')) DESC
+    LIMIT 500
+    """,
+    (),
+)
+
 df = pd.DataFrame(rows)
 if df.empty:
     st.info("Sem dados.")

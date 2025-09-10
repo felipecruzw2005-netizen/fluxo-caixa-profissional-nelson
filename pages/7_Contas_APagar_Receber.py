@@ -1,27 +1,30 @@
-import streamlit as st, pandas as pd, datetime as dt
-from lib import db, ui
+import sys
+from pathlib import Path
+import streamlit as st
+import pandas as pd
 
-st.set_page_config(page_title="Contas a Pagar e Receber", page_icon="🧮", layout="wide")
-ui.header("assets/logo.png", "Contas a Pagar e Receber", "Pendências e recebimentos")
+# === Import shim ===
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-hoje = dt.date.today().isoformat()
+from lib import db
 
-tabs = st.tabs(["💸 A Pagar","💰 A Receber"])
+st.set_page_config(page_title="Contas a Pagar e Receber", page_icon="✅❌", layout="wide")
+st.title("✅❌ Contas a Pagar e Receber")
 
-# A Pagar
-with tabs[0]:
-    rows = db.query("""SELECT id, descricao, valor, vencimento, status FROM movimentos 
-                       WHERE deleted_at IS NULL AND tipo='saida' AND COALESCE(status,'pendente') IN ('pendente') 
-                       ORDER BY COALESCE(NULLIF(vencimento,''), '9999-12-31') ASC""", ())
-    df = pd.DataFrame(rows)
-    if df.empty: st.info("Nada a pagar."); 
-    else: st.dataframe(df, use_container_width=True, hide_index=True)
+rows = db.query("""
+SELECT id, descricao, valor, status, vencimento, responsavel_nome
+FROM movimentos
+WHERE deleted_at IS NULL
+  AND (status = 'pendente' OR status = 'confirmado')
+ORDER BY COALESCE(NULLIF(vencimento,''), to_char(created_at,'YYYY-MM-DD')) ASC
+LIMIT 200
+""", ())
 
-# A Receber
-with tabs[1]:
-    rows = db.query("""SELECT id, descricao, valor, vencimento, status FROM movimentos 
-                       WHERE deleted_at IS NULL AND tipo='entrada' AND COALESCE(status,'pendente') IN ('pendente') 
-                       ORDER BY COALESCE(NULLIF(vencimento,''), '9999-12-31') ASC""", ())
-    df = pd.DataFrame(rows)
-    if df.empty: st.info("Nada a receber."); 
-    else: st.dataframe(df, use_container_width=True, hide_index=True)
+df = pd.DataFrame(rows)
+
+if df.empty:
+    st.info("Nenhuma conta pendente no momento.")
+else:
+    st.dataframe(df, use_container_width=True, hide_index=True)

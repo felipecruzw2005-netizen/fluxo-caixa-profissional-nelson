@@ -46,28 +46,34 @@ def _current_user_id():
     return int(u["id"]) if (u and "id" in u) else None
 
 def _ensure_batch(name: str, period_label: str, created_by: int | None):
-    """Cria (ou reaproveita) um batch e retorna o id. Funciona em Postgres e SQLite."""
+    """
+    Cria (ou reaproveita) um batch e retorna o id.
+    Postgres: INSERT ... ON CONFLICT DO NOTHING RETURNING id (sem alvo) + fallback SELECT.
+    SQLite: INSERT OR IGNORE + SELECT.
+    """
     is_pg = os.environ.get("DATABASE_URL","").startswith("postgresql")
 
     if is_pg:
-        # Postgres com UPSERT
-        bid = db.query(
+        # 1) tenta inserir; se conflitar, DO NOTHING (sem alvo) e não retorna linha
+        row = db.query(
             "WITH ins AS ( "
             "  INSERT INTO batches (name, period_label, created_by) "
             "  VALUES (?,?,?) "
-            "  ON CONFLICT (name, period_label) DO NOTHING "
+            "  ON CONFLICT DO NOTHING "
             "  RETURNING id "
             ") SELECT id FROM ins",
             (name, period_label, created_by),
         )
-        if bid:
-            return bid[0]["id"]
+        if row:
+            return row[0]["id"]
+        # 2) já existia: busca o id
         row = db.query(
             "SELECT id FROM batches WHERE name=? AND period_label=? LIMIT 1",
             (name, period_label),
         )
         if row:
             return row[0]["id"]
+        # 3) último recurso (caso a tabela não tenha unique e a 1) não inseriu)
         return db.execute(
             "INSERT INTO batches (name, period_label, created_by) VALUES (?,?,?)",
             (name, period_label, created_by),

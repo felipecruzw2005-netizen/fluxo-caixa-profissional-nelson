@@ -33,7 +33,8 @@ if tipo != "Todos":
     sql += " AND tipo = ?"
     params.append(tipo)
 
-sql += " ORDER BY date(data) DESC"
+sql += " ORDER BY COALESCE(NULLIF(data,''), to_char(created_at,'YYYY-MM-DD')) DESC"
+
 
 rows = db.query(sql, tuple(params))
 
